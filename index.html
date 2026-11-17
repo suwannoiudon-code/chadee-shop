@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ร้านน้ำปั่นชาดี</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans Thai",sans-serif;background:#f6f6f2;color:#222;padding-bottom:90px}
+header{background:#2e7d32;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:18px}
+.cats{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;background:#fff;position:sticky;top:48px;z-index:4}
+.cats button{white-space:nowrap;border:1px solid #bbb;background:#fff;border-radius:16px;padding:6px 12px;font-size:14px}
+.cats button.on{background:#2e7d32;color:#fff;border-color:#2e7d32}
+.item{display:flex;justify-content:space-between;align-items:center;background:#fff;margin:8px 12px;padding:12px;border-radius:10px}
+.item b{font-size:15px}.item span{color:#2e7d32;font-weight:600}
+.bar{position:fixed;bottom:0;left:0;right:0;background:#2e7d32;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;font-size:16px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;z-index:10}
+.modal.show{display:flex}
+.sheet{background:#fff;width:100%;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
+.sheet h3{margin:0 0 8px}.grp{margin:12px 0}.grp p{margin:0 0 6px;font-weight:600}
+.opt{display:inline-block;margin:0 6px 6px 0}
+.opt input{display:none}
+.opt label{display:inline-block;padding:7px 12px;border:1px solid #bbb;border-radius:16px;font-size:14px}
+.opt input:checked+label{background:#2e7d32;color:#fff;border-color:#2e7d32}
+.btn{width:100%;border:0;background:#2e7d32;color:#fff;padding:13px;border-radius:10px;font-size:16px;margin-top:8px}
+.btn.gray{background:#999}
+input[type=text],textarea{width:100%;padding:10px;border:1px solid #bbb;border-radius:8px;font-size:16px}
+.line{display:flex;justify-content:space-between;margin:6px 0;font-size:14px}
+.small{color:#666;font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>ร้านน้ำปั่นชาดี - สั่งกลับบ้าน</h1></header>
+<div class="cats" id="cats"></div>
+<div id="closed" style="display:none;background:#c62828;color:#fff;padding:12px;text-align:center;font-size:15px"></div>
+<div id="list"></div>
+<div class="bar" id="bar" onclick="openCart()" style="display:none"><div id="cnt"></div><div id="tot"></div></div>
+<div class="modal" id="m1"><div class="sheet" id="s1"></div></div>
+<div class="modal" id="m2"><div class="sheet" id="s2"></div></div>
+
+<script>
+// ===== ตั้งค่า (แก้ตรงนี้) =====
+const SUPABASE_URL = "https://ewekmkecnczrvhcmrsps.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3ZWtta2VjbmN6cnZoY21yc3BzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0ODI5MzAsImV4cCI6MjExMDA1ODkzMH0.4rrYcvhveIQW7hAuvVKjNh8K1AFx-6Ly0NeUENrVY2o";
+const PROMPTPAY_ID = "0821618473";
+// ===============================
+let MENU = [{"n":"black coffee น้ำผึ้งมะนาว","c":"กาแฟสด","p":40,"s":1,"t":1},{"n":"กาแฟโบราณ","c":"โอเลี้ยงและกาแฟโบราณ","p":30,"s":1,"t":1,"b":5},{"n":"กาแฟโฟมมะพร้าว","c":"coconut โฟม","p":60,"s":1},{"n":"คาปูชิโน่ ปั่น","c":"กาแฟสด","p":50,"s":1,"t":1},{"n":"คาปูชิโน่เย็น","c":"กาแฟสด","p":40,"s":1,"t":1,"b":10},{"n":"คาปูร้อน","c":"เมนูร้อน","p":35,"s":1},{"n":"คาราเมลมัคคิอาโต้","c":"กาแฟสด","p":40,"s":1,"t":1,"b":10},{"n":"คาราเมลโซดา ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"คาราเมลโซดา เย็น","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"ชาดำ เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"ชานมไต้หวัน","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"ชานมไต้หวัน ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชามะนาว เย็น","c":"เมนูมะนาว","p":30,"s":1,"t":1,"b":5},{"n":"ชามะนาวปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชาเขียว เย็น","c":"อื่นๆ","p":30,"s":1,"t":1,"b":5},{"n":"ชาเขียวดำ","c":"เมนูเย็นและปั่น","p":30},{"n":"ชาเขียวน้ำผึ้งมะนาว","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"ชาเขียวปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชาเขียวมะนาว","c":"เมนูมะนาว","p":30,"s":1,"t":1,"b":5,"x":1},{"n":"ชาเขียวมะนาว ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชาเขียวมะนาว เย็น","c":"เมนูมะนาว","p":30,"s":1,"t":1,"b":5},{"n":"ชาเขียวร้อน","c":"เมนูร้อน","p":30,"x":1},{"n":"ชาเขียวโฟมมะพร้าว","c":"coconut โฟม","p":40,"s":1},{"n":"ชาไต้หวัน ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชาไทยปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ชาไทยร้อน","c":"เมนูร้อน","p":30},{"n":"ชาไทยลิ้นจี่เย็น","c":"เมนูเย็นและปั่น","p":30},{"n":"ชาไทยเย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"ชาไทยโฟมมะพร้าว","c":"coconut โฟม","p":40,"s":1},{"n":"นมชมพูปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมชมพูเย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"นมสด","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสด ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมสดคาราเมล","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดคาราเมล","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดน้ำผึ้ง","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดน้ำผึ้งมะนาว","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดบราวน์ซูการ์","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดบลูฮาวาย","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดบลูเบอร์รี่","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดบาชูก้า","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดปีโป้","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดปีโป้ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมสดลิ้นจี่","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดสตอเบอรี่","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดสตอเบอรี่ ปั่น","c":"นมสด","p":35,"s":1,"t":1},{"n":"นมสดส้ม","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดเสาวรส","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดแตงโม","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดแอปเปิ้ล","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดแอปเปิ้ลเขียว","c":"อื่นๆ","p":30,"s":1,"t":1,"b":5},{"n":"นมสดโยเกิร์ต","c":"นมสด","p":30,"s":1,"t":1,"b":5},{"n":"นมสดโอริโอ้ ปั่น","c":"นมสด","p":35,"s":1,"t":1,"b":5},{"n":"นมหมีbrown sugar","c":"นมหมี","p":30,"s":1,"t":1,"b":5},{"n":"นมหมีคาราเมล ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมหมีน้ำผึ้ง","c":"นมหมี","p":30,"s":1,"t":1,"b":5},{"n":"นมหมีน้ำผึ้ง ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมหมีบลูเบอร์รี่","c":"นมหมี","p":30,"s":1,"t":1,"b":5},{"n":"นมหมีปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"นมหมีสตอเบอรี่","c":"นมหมี","p":30,"t":1,"b":5,"x":1},{"n":"นมหมีเย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"นมหมีเสาวรส","c":"นมหมี","p":30,"s":1,"t":1,"b":5},{"n":"นมหมีแอปเปิ้ลเขียว","c":"นมหมี","p":30,"s":1,"t":1,"b":5},{"n":"น้ำผึ้งมะนาว","c":"อื่นๆ","p":30,"s":1,"t":1,"b":5},{"n":"น้ำผึ้งมะนาวโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"น้ำผึ้งลิ้นจี่โซดา เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"น้ำมะนาว","c":"เมนูมะนาว","p":30,"s":1,"t":1,"b":5},{"n":"น้ำส้มเพียว","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"น้ำแดงเฮลบลูบอย ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"บราวน์ซูการ์โซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"บลูฮาวาย(เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"บลูฮาวายเพียว ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"บลูฮาวายโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"บลูเบอรี่(เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"บลูเบอรี่โซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"ปีโป้ 1 ถุง","c":"เมนูเย็นและปั่น","p":30},{"n":"ผลไม้รวมเลือกเอง","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"พีชเพียวๆ","c":"อื่นๆ","p":20,"s":1,"t":1},{"n":"พีชโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1},{"n":"มอคค่าเย็น","c":"กาแฟสด","p":45,"s":1,"t":1,"b":10},{"n":"มะนาวโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"มะพร้าวชาเขียว เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"มะพร้าวนมสด เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"มะพร้าวนมสดปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1,"k":1},{"n":"มะพร้าวสด เพียว เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"มะพร้าวเพียว ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"มัทฉะน้ำผึ้งมะนาว","c":"เมนูมัทฉะ","p":45,"s3":1},{"n":"มัทฉะมะนาวโซดา","c":"อื่นๆ","p":45,"s":1,"t":1},{"n":"มัทฉะมะพร้าว","c":"เมนูมัทฉะ","p":45,"s":1,"s3":1,"t":1},{"n":"มัทฉะมะพร้าว ตัวRenana","c":"เมนูมัทฉะ","p":60,"s":1,"t":1},{"n":"มัทฉะลาเต้ cold whisk","c":"เมนูมัทฉะ","p":45,"s":1,"s3":1,"t":1,"b":10},{"n":"มัทฉะลาเต้ cold whisk","c":"เมนูมัทฉะ","p":60,"s":1,"t":1},{"n":"มัทฉะลาเต้คลาสสิค","c":"เมนูมัทฉะ","p":45,"s":1,"s3":1,"t":1,"b":10},{"n":"มัทฉะลาเต้ตัว 60","c":"เมนูมัทฉะ","p":60,"s":1,"t":1},{"n":"มัทฉะลาเต้นูเทลล่า","c":"เมนูมัทฉะ","p":55,"s":1,"t":1,"b":10},{"n":"มัทฉะลาเต้ร้อน","c":"เมนูมัทฉะ","p":40},{"n":"มัทฉะลาเต้สตอเบอรี่","c":"อื่นๆ","p":45,"s":1,"t":1,"x":1},{"n":"มัทฉะลาเต้ส้ม","c":"อื่นๆ","p":45,"s":1,"t":1,"x":1},{"n":"มัทฉะส้ม","c":"อื่นๆ","p":45,"s":1,"t":1,"b":5,"x":1},{"n":"มัทฉะโฟมมะพร้าว","c":"coconut โฟม","p":65,"s":1,"t":1},{"n":"ลาเต้ ปั่น","c":"กาแฟสด","p":50,"s":1,"t":1},{"n":"ลาเต้ร้อน","c":"เมนูร้อน","p":35},{"n":"ลาเต้เย็น","c":"กาแฟสด","p":40,"s":1,"t":1,"b":10},{"n":"ลิ้นจี่(เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"ลิ้นจี่โซดา ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ลิ้นจี่โซดาเย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1},{"n":"วิปครีม 1 แก้ว","c":"เมนูเย็นและปั่น","p":30},{"n":"สตอเบอรี่ (เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"s":1,"b":5},{"n":"สตอเบอรี่โซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"สตอเบอรี่โยเกิร์ต ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"ส้ม (เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"ส้มโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"อเมริกาโน่","c":"กาแฟสด","p":30,"s":1,"t":1},{"n":"อเมริกาโน่น้ำผึ้ง","c":"กาแฟสด","p":40,"s":1},{"n":"อเมริกาโน่มะพร้าว","c":"กาแฟสด","p":40,"s":1,"t":1},{"n":"อเมริกาโน่ร้อน","c":"อื่นๆ","p":25,"s":1,"t":1},{"n":"อเมริกาโน่ส้ม","c":"กาแฟสด","p":40,"s":1},{"n":"เนสกาแฟ","c":"เนสกาแฟ","p":30,"s":1,"t":1,"b":5},{"n":"เนสกาแฟ ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1,"k":1},{"n":"เนสกาแฟเย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"เนสวีต้า","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"เนสวีต้าปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"เป๊ปซี่ปั่น","c":"เมนูเย็นและปั่น","p":30},{"n":"เป๊ปซี่เย็น","c":"เมนูเย็นและปั่น","p":25},{"n":"เผือก","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"เผือก ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1,"k":1},{"n":"เผือก ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"เพียวมัทฉะ","c":"เมนูมัทฉะ","p":30,"s3":1},{"n":"เสาวรส (เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"เสาวรสโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"เอ็มร้อยปีโป้ ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"เอ็มร้อยปีโป้ ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"เอสเพรสโซ่ ปั่น","c":"กาแฟสด","p":50,"s":1,"t":1},{"n":"เอสเพรสโซ่ช็อต","c":"เมนูร้อน","p":25},{"n":"เอสเย็น","c":"กาแฟสด","p":40,"s":1,"t":1,"b":10},{"n":"แคนตาลูป","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"แดงมะนาวโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"แตงโม(เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"แตงโมโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"แอปเปิ้ลเขียว(เพียวๆ)","c":"น้ำผลไม้ปั่น","p":30,"b":5,"x":1},{"n":"แอปเปิ้ลเขียวโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"โกโก้ เย็น","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"โกโก้ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"โกโก้ปั่นเพิ่มโอริโอ้","c":"เมนูเย็นและปั่น","p":40,"s":1,"t":1},{"n":"โกโก้ร้อน","c":"เมนูร้อน","p":30,"x":1},{"n":"โกโก้โฟมมะพร้าว","c":"coconut โฟม","p":40,"s":1},{"n":"โค้กปั่น","c":"อื่นๆ","p":30,"s":1,"t":1},{"n":"โยเกิร์ตปีโป้ ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"โยเกิร์ตเพียว ปั่น","c":"เมนูเย็นและปั่น","p":35,"s":1,"t":1},{"n":"โยเกิร์ตโซดา","c":"โซดาเมนู","p":30,"s":1,"t":1,"b":5},{"n":"โอวัลติน","c":"เมนูเย็นและปั่น","p":30,"s":1,"t":1,"b":5},{"n":"โอวัลตินร้อน","c":"เมนูร้อน","p":30},{"n":"โอเลี้ยง","c":"โอเลี้ยงและกาแฟโบราณ","p":30,"s":1,"t":1,"b":5},{"n":"โอเลี้ยงยกล้อ","c":"โอเลี้ยงและกาแฟโบราณ","p":30,"s":1,"t":1,"b":5}];
+const BASE = MENU.map((m,i)=>({...m,idx:i})); MENU = BASE.slice();
+const SWEET = ["0","25","50 (หวานน้อย)","75","100 (หวานปกติ)"];
+const SWEET3 = ["0","50","100"];
+const SWEET_PLUS = ["125","150","200"];
+const TOPS = [["ไข่มุก",0],["บุกบาชูก้า",10],["วิปครีมหมวก",15]];
+const SHOT = 15;
+let cat = null, cart = [];
+let cats = [...new Set(MENU.map(m=>m.c))];
+const $ = id => document.getElementById(id);
+
+function drawCats(){
+  $("cats").innerHTML = cats.map(c=>`<button class="${c===cat?'on':''}" onclick="setCat('${c.replace(/'/g,"\\'")}')">${c}</button>`).join("");
+}
+function setCat(c){cat=c;drawCats();drawList();}
+function drawList(){
+  const rows = MENU.filter(m=>m.c===cat).map(m=>[m,m.idx]);
+  $("list").innerHTML = rows.map(([m,i])=>{ const ph = PHOTO[i] ? `<img src="${PHOTO[i]}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none">` : ""; return `<div class="item" onclick="pick(${i})"><div style="display:flex;align-items:center;gap:10px;min-width:0">${ph}<b>${m.n}</b></div><span style="flex:none">${m.p} ฿</span></div>`; }).join("");
+}
+function pick(i){
+  const m = MENU.find(x=>x.idx===i);
+  let h = `<h3>${m.n}</h3><div class="small">${m.p} บาท</div>`;
+  if(m.s){ h += `<div class="grp"><p>ความหวาน</p>${(m.s3?SWEET3:SWEET.concat(SWEET_PLUS)).map((s,k)=>`<span class="opt"><input type="radio" name="sw" id="sw${k}" value="${s}" ${k===(m.s3?2:4)?'checked':''}><label for="sw${k}">${s}</label></span>`).join("")}</div>`;
+  }
+  if(m.t){ h += `<div class="grp"><p>ท็อปปิ้ง</p>${TOPS.map((t,k)=>`<span class="opt"><input type="checkbox" name="tp" id="tp${k}" value="${k}"><label for="tp${k}">${t[0]}${t[1]?` +${t[1]}`:" ฟรี"}</label></span>`).join("")}</div>`; }
+  if(m.b){ h += `<div class="grp"><p>ปั่น</p><span class="opt"><input type="checkbox" id="bl"><label for="bl">ปั่นเพิ่ม +${m.b}</label></span></div>`; }
+  if(m.k){ h += `<div class="grp"><p>กาแฟ</p><span class="opt"><input type="checkbox" id="sh"><label for="sh">เพิ่มช็อตกาแฟ +${SHOT}</label></span></div>`; }
+  if(m.x){ h += `<div class="grp"><p>บอกความต้องการ</p><textarea id="nt" rows="2" placeholder="เช่น ไม่ใส่น้ำแข็ง"></textarea></div>`; }
+  h += `<div class="grp"><p>จำนวน</p><input type="number" id="qty" min="1" value="1" style="width:80px;padding:8px;font-size:16px"></div>`;
+  h += `<button class="btn" onclick="addItem(${i})">ใส่ตะกร้า</button><button class="btn gray" onclick="closeM('m1')">ยกเลิก</button>`;
+  $("s1").innerHTML = h; $("m1").classList.add("show");
+}
+function addItem(i){
+  const m = MENU.find(x=>x.idx===i);
+  const sw = document.querySelector('input[name=sw]:checked');
+  const tops = [...document.querySelectorAll('input[name=tp]:checked')].map(e=>TOPS[+e.value]);
+  const blend = $("bl") && $("bl").checked ? m.b : 0;
+  const shot = $("sh") && $("sh").checked ? SHOT : 0;
+  const qty = Math.max(1, parseInt($("qty").value)||1);
+  const unit = m.p + tops.reduce((a,t)=>a+t[1],0) + blend + shot;
+  cart.push({idx:m.idx, name:m.n, sweet:sw?sw.value:"", tops:tops.map(t=>t[0]), blend:!!blend, shot:!!shot, note:$("nt")?$("nt").value.trim():"", qty, unit});
+  closeM("m1"); drawBar();
+}
+function total(){return cart.reduce((a,c)=>a+c.unit*c.qty,0);}
+function drawBar(){
+  $("bar").style.display = cart.length ? "flex":"none";
+  $("cnt").textContent = "ตะกร้า " + cart.reduce((a,c)=>a+c.qty,0) + " แก้ว";
+  $("tot").textContent = total() + " ฿";
+}
+function openCart(){
+  let h = `<h3>ตะกร้าของคุณ</h3>`;
+  h += cart.map((c,i)=>`<div class="line"><div><b>${c.name}</b> x${c.qty}<br><span class="small">${[c.sweet?'หวาน '+c.sweet:'',...c.tops,c.blend?'ปั่น':'',c.shot?'เพิ่มช็อต':'',c.note].filter(Boolean).join(" / ")}</span></div><div>${c.unit*c.qty} ฿<br><a href="#" onclick="rm(${i});return false" class="small">ลบ</a></div></div>`).join("");
+  h += `<div class="line"><b>รวม</b><b>${total()} บาท</b></div>`;
+  h += `<div class="grp"><p>ชื่อเล่นของคุณ (ไว้เรียกรับของ)</p><input type="text" id="nick" maxlength="20"></div>`;
+  h += `<div class="grp"><p>วิธีจ่ายเงิน</p><span class="opt"><input type="radio" name="pm" id="pm1" value="cash" checked><label for="pm1">เงินสดที่เคาน์เตอร์</label></span><span class="opt"><input type="radio" name="pm" id="pm2" value="promptpay"><label for="pm2">สแกนจ่ายพร้อมเพย์</label></span></div>`;
+  h += `${accepting?'<button class="btn" onclick="submitOrder()">ยืนยันสั่ง</button>':'<p class="small" style="color:#c62828">ร้านปิดรับออเดอร์ชั่วคราว</p>'}<button class="btn gray" onclick="closeM('m2')">กลับไปเลือกเพิ่ม</button>`;
+  $("s2").innerHTML = h; $("m2").classList.add("show");
+}
+function rm(i){cart.splice(i,1);drawBar(); cart.length?openCart():closeM("m2");}
+function closeM(id){$(id).classList.remove("show");}
+
+// สร้างข้อความ PromptPay QR (EMVCo) ใส่ยอดเงิน
+function crc16(s){let c=0xFFFF;for(let i=0;i<s.length;i++){c^=s.charCodeAt(i)<<8;for(let j=0;j<8;j++)c=(c&0x8000)?((c<<1)^0x1021):(c<<1);c&=0xFFFF;}return c.toString(16).toUpperCase().padStart(4,"0");}
+function ppPayload(id, amount){
+  const t=(k,v)=>k+String(v.length).padStart(2,"0")+v;
+  let acc = id.replace(/\D/g,"");
+  let type, val;
+  if(acc.length>=13){type="02";val=acc;} else {type="01";val="0066"+acc.replace(/^0/,"");}
+  const merchant = t("00","A000000677010111")+t(type,val);
+  let p = t("00","01")+t("01","12")+t("29",merchant)+t("53","764")+t("54",amount.toFixed(2))+t("58","TH")+"6304";
+  return p+crc16(p);
+}
+
+async function submitOrder(){
+  const nick = $("nick").value.trim();
+  if(!nick){alert("กรุณาใส่ชื่อเล่นก่อนครับ");return;}
+  const pm = (document.querySelector("input[name=pm]:checked")||{}).value || "cash";
+  const body = {p_nickname:nick, p_items:cart, p_total:total(), p_pay:pm};
+  try{
+    const r = await fetch(SUPABASE_URL+"/rest/v1/rpc/create_order",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await r.text());
+    const saved = await r.json();
+    showPay(saved, nick, pm);
+  }catch(e){ if(String(e.message).includes("SHOP_CLOSED")){accepting=false;checkShop();alert("ร้านปิดรับออเดอร์แล้วครับ");return;} alert("ส่งออเดอร์ไม่สำเร็จ ลองใหม่อีกครั้ง หรือแจ้งพนักงานครับ\n"+e.message); }
+}
+function showPay(o, nick, pm){
+  closeM("m2");
+  if(pm==="cash"){
+    $("s2").innerHTML = `<h3>สั่งแล้ว คิวที่ ${o.id}</h3><p>ชื่อ ${nick} ยอด <b>${o.total} บาท</b></p><p style="font-size:18px"><b>กรุณาจ่ายเงินสดที่เคาน์เตอร์</b></p><p class="small">ร้านจะเรียกชื่อคุณเมื่อเครื่องดื่มพร้อม</p><button class="btn gray" onclick="closeM('m2')">สั่งเพิ่ม (ออเดอร์ใหม่)</button>`;
+  } else {
+    const payload = ppPayload(PROMPTPAY_ID, o.total);
+    const qr = "https://api.qrserver.com/v1/create-qr-code/?size=260x260&data="+encodeURIComponent(payload);
+    $("s2").innerHTML = `<h3>สั่งแล้ว คิวที่ ${o.id}</h3><p>ชื่อ ${nick} ยอด <b>${o.total} บาท</b></p><p>สแกนจ่ายด้วยแอปธนาคาร แล้วแจ้งพนักงานที่เคาน์เตอร์</p><p style="text-align:center"><img src="${qr}" width="260" height="260" alt="PromptPay QR"></p><p class="small">จ่ายเงินให้เรียบร้อยก่อนกดสั่งเพิ่ม เพราะ QR จะหายไป</p><button class="btn gray" onclick="closeM('m2')">สั่งเพิ่ม (ออเดอร์ใหม่)</button>`;
+  }
+  $("m2").classList.add("show"); cart=[]; drawBar();
+}
+let accepting = true;
+let PHOTO = {};
+async function loadMenu(){
+  try{
+    const r = await fetch(SUPABASE_URL+"/rest/v1/menu_custom?select=*&order=idx.asc",{headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}});
+    const rows = await r.json();
+    if(!Array.isArray(rows)) return;
+    const by = {}; rows.forEach(x=>by[x.idx]=x);
+    const out = [];
+    for(const b of BASE){
+      const o = by[b.idx];
+      if(!o){ out.push(b); continue; }
+      if(o.active) out.push({idx:b.idx, n:o.name, c:o.cat, p:Number(o.price), ...(o.opts||{})});
+    }
+    for(const x of rows){ if(x.is_new && x.active) out.push({idx:x.idx, n:x.name, c:x.cat, p:Number(x.price), ...(x.opts||{})}); }
+    MENU = out;
+    cats = [...new Set(MENU.map(m=>m.c))];
+    if(!cat || !cats.includes(cat)) cat = cats[0];
+    drawCats(); drawList();
+  }catch(e){}
+}
+async function loadPhotos(){
+  try{
+    const r = await fetch(SUPABASE_URL+"/rest/v1/menu_photos?select=idx,file,updated_at",{headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}});
+    const j = await r.json();
+    PHOTO = {};
+    for(const p of j){ PHOTO[p.idx] = SUPABASE_URL+"/storage/v1/object/public/menu-images/"+p.file+"?v="+encodeURIComponent(p.updated_at); }
+    drawList();
+  }catch(e){}
+}
+function bkkHM(){ return new Date(Date.now()+7*3600000).toISOString().slice(11,16); }
+function isOpenNow(s){
+  if(!s.accepting) return false;
+  if(!s.open_time || !s.close_time) return true;
+  const o=s.open_time.slice(0,5), c=s.close_time.slice(0,5), t=bkkHM();
+  return c>o ? (t>=o && t<c) : (t>=o || t<c);
+}
+async function checkShop(){
+  try{
+    const r = await fetch(SUPABASE_URL+"/rest/v1/shop_settings?id=eq.1&select=accepting,message,open_time,close_time",{headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}});
+    const j = await r.json();
+    if(j[0]){
+      const s=j[0];
+      accepting = isOpenNow(s);
+      const box=$("closed");
+      const hrs = (s.open_time && s.close_time) ? (s.open_time.slice(0,5)+" - "+s.close_time.slice(0,5)+" น.") : "";
+      if(!accepting){
+        box.style.background="#c62828";
+        box.textContent = !s.accepting ? (s.message || "ร้านปิดรับออเดอร์ชั่วคราว") : "ร้านปิดแล้ว เปิดรับออเดอร์ "+hrs;
+        box.style.display="block";
+      } else if(hrs){
+        box.style.background="#2e7d32";
+        box.textContent = "เปิดรับออเดอร์วันนี้ "+hrs+" หลังเวลาปิดจะสั่งไม่ได้";
+        box.style.display="block";
+      } else {
+        box.style.display="none";
+      }
+    }
+  }catch(e){}
+}
+checkShop(); setInterval(checkShop, 30000);
+loadMenu(); setInterval(loadMenu, 300000);
+loadPhotos(); setInterval(loadPhotos, 300000);
+setCat(cats[0]);
+</script>
+</body>
+</html>
