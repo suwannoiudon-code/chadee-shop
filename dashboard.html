@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>แดชบอร์ดยอดขาย - ร้านน้ำปั่นชาดี</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Noto Sans Thai",sans-serif;background:#f6f6f2;color:#222}
+header{background:#2e7d32;color:#fff;padding:12px 14px;position:sticky;top:0;z-index:5}
+header h1{margin:0 0 8px;font-size:17px}
+.dc{display:flex;gap:6px;align-items:center}
+.dc button{background:#fff;color:#2e7d32;border:0;border-radius:8px;padding:8px 12px;font-size:16px}
+.dc input{flex:1;min-width:0;padding:7px;border-radius:8px;border:0;font-size:15px}
+.nav{font-size:13px;margin-top:6px}.nav a{color:#fff}
+main{padding:12px;max-width:760px;margin:auto}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:#fff;border-radius:12px;padding:12px}
+.card .k{font-size:12px;color:#666}
+.card .v{font-size:22px;font-weight:700;color:#2e7d32;margin-top:4px}
+.card.wide{grid-column:1/-1}
+h2{font-size:15px;margin:18px 4px 8px}
+.bars{display:flex;align-items:flex-end;gap:4px;height:160px;background:#fff;border-radius:12px;padding:20px 8px 22px}
+.bar{flex:1;background:#66bb6a;border-radius:4px 4px 0 0;min-width:0;position:relative}
+.bar span{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:#666}
+.bar em{position:absolute;top:-15px;left:-4px;right:-4px;text-align:center;font-size:10px;font-style:normal;color:#333;white-space:nowrap}
+.tbl{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;font-size:14px}
+.tbl td{padding:9px 10px;border-bottom:1px solid #eee}
+.tbl td:last-child{text-align:right}
+.pos{color:#2e7d32}.neg{color:#c62828}
+.panel{background:#fff;border-radius:12px;padding:12px;font-size:14px}
+#login{padding:30px 16px;max-width:360px;margin:auto}
+#login input{width:100%;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px;margin-bottom:10px}
+.btn{border:0;background:#2e7d32;color:#fff;padding:12px;border-radius:8px;font-size:15px;width:100%}
+.small{color:#666;font-size:12px}
+</style>
+</head>
+<body>
+<div id="login">
+  <h2>เข้าสู่ระบบแดชบอร์ด</h2>
+  <p class="small">ใช้บัญชีพนักงานเดียวกับหน้าร้าน</p>
+  <input id="em" type="email" placeholder="อีเมล">
+  <input id="pw" type="password" placeholder="รหัสผ่าน">
+  <button class="btn" onclick="login()">เข้าสู่ระบบ</button>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>แดชบอร์ดยอดขาย</h1>
+    <div class="dc">
+      <button onclick="step(-1)">◀</button>
+      <input type="date" id="d" onchange="load()">
+      <button onclick="step(1)">▶</button>
+      <button onclick="load()">↻</button>
+    </div>
+    <div class="nav"><a href="shop.html">← กลับหน้าร้าน</a></div>
+  </header>
+  <main>
+    <div class="grid" id="cards"></div>
+    <h2>ยอดขายรายชั่วโมง (เวลาไทย)</h2>
+    <div class="bars" id="hours"></div>
+    <h2>เมนูขายดีวันนี้</h2>
+    <table class="tbl" id="top"></table>
+    <h2>การปิดยอด</h2>
+    <div class="panel" id="close"></div>
+    <p class="small" id="st"></p>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ewekmkecnczrvhcmrsps.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3ZWtta2VjbmN6cnZoY21yc3BzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0ODI5MzAsImV4cCI6MjExMDA1ODkzMH0.4rrYcvhveIQW7hAuvVKjNh8K1AFx-6Ly0NeUENrVY2o";
+const $ = id => document.getElementById(id);
+let token = null, timer = null;
+const H = () => ({apikey:SUPABASE_KEY, Authorization:"Bearer "+(token||SUPABASE_KEY)});
+const money = n => Number(n||0).toLocaleString("th-TH")+" ฿";
+const esc = s => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const bkk = off => new Date(Date.now()+7*3600000+off*86400000).toISOString().slice(0,10);
+
+async function login(){
+  const r = await fetch(SUPABASE_URL+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify({email:$("em").value,password:$("pw").value})});
+  const j = await r.json();
+  if(!j.access_token){ alert("เข้าสู่ระบบไม่สำเร็จ"); return; }
+  token = j.access_token;
+  $("login").style.display="none"; $("app").style.display="block";
+  $("d").value = bkk(0);
+  load(); timer = setInterval(load, 60000);
+}
+function step(n){
+  const d = new Date($("d").value+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n);
+  $("d").value = d.toISOString().slice(0,10); load();
+}
+async function load(){
+  const d = $("d").value; if(!d) return;
+  const from = encodeURIComponent(d+"T00:00:00+07:00"), to = encodeURIComponent(d+"T23:59:59.999+07:00");
+  try{
+    const sr = await fetch(SUPABASE_URL+"/rest/v1/sales_log?paid_at=gte."+from+"&paid_at=lte."+to+"&order=paid_at.asc&limit=5000",{headers:H()}).then(r=>r.json());
+    if(!Array.isArray(sr)) throw new Error(sr.message || "โหลดยอดขายไม่ได้");
+    const cr = await fetch(SUPABASE_URL+"/rest/v1/daily_closes?close_date=eq."+d+"&select=*",{headers:H()}).then(r=>r.json()).catch(()=>null);
+    render(sr, Array.isArray(cr) ? cr[0] : null);
+    $("st").textContent = "อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH");
+  }catch(e){ $("st").textContent = "ผิดพลาด: "+e.message; }
+}
+function render(rows, close){
+  const live = rows.filter(x=>!x.voided);
+  const voidedIds = new Set(rows.filter(x=>x.voided).map(x=>x.order_id));
+  const bills = new Set(live.map(x=>x.order_id)).size;
+  const total = live.reduce((a,x)=>a+Number(x.line_total),0);
+  const cash = live.filter(x=>x.pay_method==="cash").reduce((a,x)=>a+Number(x.line_total),0);
+  const pp = total - cash;
+  const avg = bills ? Math.round(total/bills) : 0;
+  const cards = [["บิล",bills],["ยอดขายรวม",money(total)],["เฉลี่ยต่อบิล",money(avg)],["เงินสด",money(cash)],["พร้อมเพย์",money(pp)],["บิลที่ยกเลิก",voidedIds.size]];
+  $("cards").innerHTML = cards.map(([k,v],i)=>`<div class="card ${i===1?"wide":""}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+  const hrs = new Array(24).fill(0);
+  for(const x of live){ const h = new Date(new Date(x.paid_at).getTime()+7*3600000).getUTCHours(); hrs[h] += Number(x.line_total); }
+  const hasAny = hrs.some(v=>v>0);
+  if(hasAny){
+    const lo = hrs.findIndex(v=>v>0), hi = 23 - [...hrs].reverse().findIndex(v=>v>0);
+    const max = Math.max(...hrs);
+    let html = "";
+    for(let h=lo; h<=hi; h++){
+      const v = hrs[h];
+      html += `<div class="bar" style="height:${Math.max(3, v/max*100)}%" title="${h}:00 ${money(v)}">${v?`<em>${Math.round(v)}</em>`:""}<span>${h}</span></div>`;
+    }
+    $("hours").innerHTML = html;
+  } else {
+    $("hours").innerHTML = '<p class="small" style="margin:auto">ยังไม่มียอดขายในวันนี้</p>';
+  }
+
+  const agg = {};
+  for(const x of live){ const a = agg[x.item_name] || (agg[x.item_name] = {q:0, v:0}); a.q += Number(x.qty); a.v += Number(x.line_total); }
+  const top = Object.entries(agg).sort((a,b)=>b[1].v-a[1].v).slice(0,5);
+  $("top").innerHTML = top.length
+    ? top.map(([n,a])=>`<tr><td>${esc(n)}</td><td>x${a.q}</td><td>${money(a.v)}</td></tr>`).join("")
+    : '<tr><td class="small">ยังไม่มีรายการ</td></tr>';
+
+  if(close){
+    const cls = close.difference < 0 ? "neg" : "pos";
+    const sign = close.difference > 0 ? "+" : "";
+    $("close").innerHTML = `<div class="small">ปิดยอดเมื่อ ${new Date(close.closed_at).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok"})}</div>
+      <p>เงินทอนตั้งต้น ${money(close.opening_cash)} · เงินสดที่ควรมี ${money(close.expected_cash)} · นับได้ ${money(close.counted_cash)}</p>
+      <p><b class="${cls}">ผลต่าง ${sign}${money(close.difference)}</b></p>`;
+  } else {
+    $("close").innerHTML = '<p class="small" style="margin:0">ยังไม่ได้ปิดยอดของวันนี้</p>';
+  }
+}
+</script>
+</body>
+</html>
