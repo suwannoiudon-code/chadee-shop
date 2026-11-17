@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>หน้าร้าน - ร้านน้ำปั่นชาดี</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Noto Sans Thai",sans-serif;background:#f6f6f2;color:#222}
+header{background:#2e7d32;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+header h1{margin:0;font-size:17px}
+header button{border:0;border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:#2e7d32;margin-left:6px}
+#login{padding:30px 16px;max-width:360px;margin:auto}
+#login input{width:100%;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:8px;margin-bottom:10px}
+.btn{border:0;background:#2e7d32;color:#fff;padding:12px;border-radius:8px;font-size:15px;width:100%}
+.card{background:#fff;margin:10px;padding:12px;border-radius:10px;border-left:6px solid #f9a825}
+.card.done{border-left-color:#9e9e9e;opacity:.6}
+.card.paid{border-left-color:#2e7d32}
+.row{display:flex;justify-content:space-between;align-items:center}
+.q{font-size:20px;font-weight:700}
+.it{margin:6px 0;font-size:14px}
+.small{color:#666;font-size:12px}
+.acts button{border:0;border-radius:8px;padding:9px 11px;margin:6px 6px 0 0;font-size:14px;color:#fff}
+.b1{background:#1565c0}.b2{background:#2e7d32}.b3{background:#6a1b9a}
+#st{padding:6px 14px;font-size:12px;color:#666}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+.modal.show{display:flex}
+.sheet{background:#fff;width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
+.sheet h3{margin:0 0 10px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.tbl th,.tbl td{border-bottom:1px solid #eee;padding:5px 4px;text-align:left;vertical-align:top}
+.wrap{overflow-x:auto}
+.sum{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.sum div{background:#f1f8e9;border-radius:8px;padding:8px 10px;font-size:13px}
+.sum b{display:block;font-size:17px;color:#2e7d32}
+.mbtn{border:0;background:#2e7d32;color:#fff;padding:10px;border-radius:8px;font-size:14px;width:100%;margin-top:6px}
+.mbtn.gray{background:#999}
+select,input[type=date],input[type=file]{padding:8px;font-size:15px;border:1px solid #bbb;border-radius:8px;width:100%;margin:6px 0}
+</style>
+</head>
+<body>
+<div id="login">
+  <h2>เข้าสู่ระบบหน้าร้าน</h2>
+  <p class="small">ใช้อีเมลและรหัสผ่านที่สร้างไว้ใน Supabase สำหรับพนักงาน</p>
+  <input id="em" type="email" placeholder="อีเมล">
+  <input id="pw" type="password" placeholder="รหัสผ่าน">
+  <button class="btn" onclick="login()">เข้าสู่ระบบ</button>
+</div>
+<div id="app" style="display:none">
+  <header><h1>ออเดอร์เข้า</h1><div><a href="dashboard.html" style="background:#fff;color:#2e7d32;border-radius:8px;padding:8px 10px;font-size:13px;text-decoration:none;margin-left:6px">แดชบอร์ด</a><button onclick="openPhoto()">รูปเมนู</button><button onclick="openSales()">ยอดขาย</button><button onclick="setHours()">เวลาเปิด-ปิด</button><button onclick="toggleShop()" id="shopbtn">รับออเดอร์: ...</button><button onclick="connectBT()" id="btbtn">ต่อเครื่องพิมพ์</button><button onclick="testPrint()">ทดสอบพิมพ์</button><button onclick="toggleSound()" id="sbtn">เสียง: ปิด</button></div></header>
+  <div id="st"></div>
+  <div id="list"></div>
+<div class="modal" id="mPhoto"><div class="sheet" id="sPhoto"></div></div>
+<div class="modal" id="mSales"><div class="sheet" id="sSales"></div></div>
+</div>
+<script>
+// ===== ตั้งค่า (แก้ตรงนี้) =====
+const SUPABASE_URL = "https://ewekmkecnczrvhcmrsps.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3ZWtta2VjbmN6cnZoY21yc3BzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0ODI5MzAsImV4cCI6MjExMDA1ODkzMH0.4rrYcvhveIQW7hAuvVKjNh8K1AFx-6Ly0NeUENrVY2o";
+const SHOP_NAME = "ร้านน้ำปั่นชาดี";
+// ===============================
+const $ = id => document.getElementById(id);
+let token = null, orders = [], seen = new Set(), sound = false, first = true;
+const H = () => ({apikey:SUPABASE_KEY, Authorization:"Bearer "+(token||SUPABASE_KEY), "Content-Type":"application/json"});
+
+async function login(){
+  const r = await fetch(SUPABASE_URL+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify({email:$("em").value,password:$("pw").value})});
+  const j = await r.json();
+  if(!j.access_token){alert("เข้าสู่ระบบไม่สำเร็จ");return;}
+  token = j.access_token; $("login").style.display="none"; $("app").style.display="block";
+  poll(); setInterval(poll, 4000); loadShop(); setInterval(loadShop, 30000);
+}
+async function poll(){
+  try{
+    const since = new Date(Date.now()-18*3600*1000).toISOString();
+    const r = await fetch(SUPABASE_URL+"/rest/v1/orders?created_at=gte."+since+"&order=id.desc&limit=100",{headers:H()});
+    if(!r.ok) throw new Error(r.status);
+    orders = await r.json();
+    let fresh = false;
+    for(const o of orders){ if(!seen.has(o.id)){ seen.add(o.id); if(!first && o.status==="new") fresh = true; } }
+    first = false;
+    if(fresh) beep();
+    draw(); $("st").textContent = "อัปเดตล่าสุด " + new Date().toLocaleTimeString("th-TH");
+  }catch(e){ $("st").textContent = "เชื่อมต่อไม่ได้ กำลังลองใหม่... ("+e.message+")"; }
+}
+function beep(){
+  if(!sound) return;
+  try{ const c = new (window.AudioContext||window.webkitAudioContext)(); [0,0.25,0.5].forEach(t=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=0.3;o.start(c.currentTime+t);o.stop(c.currentTime+t+0.15);}); }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+}
+function toggleSound(){ sound=!sound; $("sbtn").textContent="เสียง: "+(sound?"เปิด":"ปิด"); if(sound) beep(); }
+function line(c){ return [c.sweet?"หวาน "+c.sweet:"", ...(c.tops||[]), c.blend?"ปั่น":"", c.shot?"เพิ่มช็อต":"", c.note].filter(Boolean).join(" / "); }
+function draw(){
+  $("list").innerHTML = orders.map(o=>`<div class="card ${o.status==='done'?'done':''} ${o.paid?'paid':''}">
+    <div class="row"><span class="q">คิว ${o.id} · ${o.nickname}</span><b>${o.total} ฿</b></div>
+    <div class="small">${new Date(o.created_at).toLocaleTimeString("th-TH")} · <b style="color:${o.pay_method==='cash'?'#c62828':'#1565c0'}">${o.pay_method==='cash'?'เงินสด':'พร้อมเพย์'}</b> · ${o.paid?"จ่ายแล้ว":"ยังไม่จ่าย"} · ${o.status==='done'?'เสร็จแล้ว':o.status==='making'?'กำลังทำ':'ใหม่'}</div>
+    ${(o.items||[]).map(c=>`<div class="it"><b>${c.name}</b> x${c.qty}<br><span class="small">${line(c)}</span></div>`).join("")}
+    <div class="acts">
+      <button class="b3" onclick="printOrder(${o.id})">ปริ้น</button>
+      ${o.paid?"":`<button class="b2" onclick="setO(${o.id},{paid:true})">รับเงินแล้ว</button>`}
+      ${o.status==='new'?`<button class="b1" onclick="setO(${o.id},{status:'making'})">เริ่มทำ</button>`:""}
+      ${o.status!=='done'?`<button class="b1" onclick="setO(${o.id},{status:'done'})">เสร็จ</button>`:""}
+    </div></div>`).join("") || '<p style="text-align:center" class="small">ยังไม่มีออเดอร์</p>';
+}
+let shopOpen = true, shopS = {accepting:true, open_time:null, close_time:null};
+function bkkHM(){ return new Date(Date.now()+7*3600000).toISOString().slice(11,16); }
+function openNowS(s){
+  if(!s.accepting) return false;
+  if(!s.open_time || !s.close_time) return true;
+  const o=s.open_time.slice(0,5), c=s.close_time.slice(0,5), t=bkkHM();
+  return c>o ? (t>=o && t<c) : (t>=o || t<c);
+}
+async function loadShop(){
+  try{
+    const r = await fetch(SUPABASE_URL+"/rest/v1/shop_settings?id=eq.1&select=accepting,open_time,close_time",{headers:H()});
+    const j = await r.json();
+    if(j[0]){
+      shopS = j[0]; shopOpen = openNowS(j[0]);
+      const b = $("shopbtn");
+      if(!j[0].accepting){ b.textContent="รับออเดอร์: ปิด"; b.style.background="#ffcdd2"; }
+      else if(!shopOpen){ b.textContent="ปิดตามเวลา ("+j[0].open_time.slice(0,5)+"-"+j[0].close_time.slice(0,5)+")"; b.style.background="#ffe0b2"; }
+      else { b.textContent="รับออเดอร์: เปิด"; b.style.background="#fff"; }
+    }
+  }catch(e){}
+}
+async function patchShop(body){
+  await fetch(SUPABASE_URL+"/rest/v1/shop_settings?id=eq.1",{method:"PATCH",headers:H(),body:JSON.stringify(body)});
+  loadShop();
+}
+async function toggleShop(){
+  if(!shopS.accepting){ if(confirm("เปิดรับออเดอร์?")) patchShop({accepting:true}); return; }
+  if(shopOpen){ if(confirm("ปิดรับออเดอร์? ลูกค้าจะสั่งไม่ได้จนกว่าจะเปิดใหม่")) patchShop({accepting:false}); return; }
+  if(confirm("ตอนนี้อยู่นอกเวลาเปิด-ปิด จะเปิดรับออเดอร์เลยและเลิกตั้งเวลา?")) patchShop({accepting:true, open_time:null, close_time:null});
+}
+async function setHours(){
+  const v = prompt("เวลาเปิด-ปิด เช่น 10:00-20:00 (เว้นว่างเพื่อเลิกตั้งเวลา)", "");
+  if(v===null) return;
+  if(v.trim()===""){ patchShop({open_time:null, close_time:null}); return; }
+  const m = v.trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
+  if(!m){ alert("รูปแบบไม่ถูกต้อง ตัวอย่าง 10:00-20:00"); return; }
+  patchShop({open_time:m[1].padStart(2,"0")+":"+m[2], close_time:m[3].padStart(2,"0")+":"+m[4]});
+}
+const MENU_NAMES = ["black coffee น้ำผึ้งมะนาว", "กาแฟโบราณ", "กาแฟโฟมมะพร้าว", "คาปูชิโน่ ปั่น", "คาปูชิโน่เย็น", "คาปูร้อน", "คาราเมลมัคคิอาโต้", "คาราเมลโซดา ปั่น", "คาราเมลโซดา เย็น", "ชาดำ เย็น", "ชานมไต้หวัน", "ชานมไต้หวัน ปั่น", "ชามะนาว เย็น", "ชามะนาวปั่น", "ชาเขียว เย็น", "ชาเขียวดำ", "ชาเขียวน้ำผึ้งมะนาว", "ชาเขียวปั่น", "ชาเขียวมะนาว", "ชาเขียวมะนาว ปั่น", "ชาเขียวมะนาว เย็น", "ชาเขียวร้อน", "ชาเขียวโฟมมะพร้าว", "ชาไต้หวัน ปั่น", "ชาไทยปั่น", "ชาไทยร้อน", "ชาไทยลิ้นจี่เย็น", "ชาไทยเย็น", "ชาไทยโฟมมะพร้าว", "นมชมพูปั่น", "นมชมพูเย็น", "นมสด", "นมสด ปั่น", "นมสดคาราเมล", "นมสดคาราเมล", "นมสดน้ำผึ้ง", "นมสดน้ำผึ้งมะนาว", "นมสดบราวน์ซูการ์", "นมสดบลูฮาวาย", "นมสดบลูเบอร์รี่", "นมสดบาชูก้า", "นมสดปีโป้", "นมสดปีโป้ปั่น", "นมสดลิ้นจี่", "นมสดสตอเบอรี่", "นมสดสตอเบอรี่ ปั่น", "นมสดส้ม", "นมสดเสาวรส", "นมสดแตงโม", "นมสดแอปเปิ้ล", "นมสดแอปเปิ้ลเขียว", "นมสดโยเกิร์ต", "นมสดโอริโอ้ ปั่น", "นมหมีbrown sugar", "นมหมีคาราเมล ปั่น", "นมหมีน้ำผึ้ง", "นมหมีน้ำผึ้ง ปั่น", "นมหมีบลูเบอร์รี่", "นมหมีปั่น", "นมหมีสตอเบอรี่", "นมหมีเย็น", "นมหมีเสาวรส", "นมหมีแอปเปิ้ลเขียว", "น้ำผึ้งมะนาว", "น้ำผึ้งมะนาวโซดา", "น้ำผึ้งลิ้นจี่โซดา เย็น", "น้ำมะนาว", "น้ำส้มเพียว", "น้ำแดงเฮลบลูบอย ปั่น", "บราวน์ซูการ์โซดา", "บลูฮาวาย(เพียวๆ)", "บลูฮาวายเพียว ปั่น", "บลูฮาวายโซดา", "บลูเบอรี่(เพียวๆ)", "บลูเบอรี่โซดา", "ปีโป้ 1 ถุง", "ผลไม้รวมเลือกเอง", "พีชเพียวๆ", "พีชโซดา", "มอคค่าเย็น", "มะนาวโซดา", "มะพร้าวชาเขียว เย็น", "มะพร้าวนมสด เย็น", "มะพร้าวนมสดปั่น", "มะพร้าวสด เพียว เย็น", "มะพร้าวเพียว ปั่น", "มัทฉะน้ำผึ้งมะนาว", "มัทฉะมะนาวโซดา", "มัทฉะมะพร้าว", "มัทฉะมะพร้าว ตัวRenana", "มัทฉะลาเต้ cold whisk", "มัทฉะลาเต้ cold whisk", "มัทฉะลาเต้คลาสสิค", "มัทฉะลาเต้ตัว 60", "มัทฉะลาเต้นูเทลล่า", "มัทฉะลาเต้ร้อน", "มัทฉะลาเต้สตอเบอรี่", "มัทฉะลาเต้ส้ม", "มัทฉะส้ม", "มัทฉะโฟมมะพร้าว", "ลาเต้ ปั่น", "ลาเต้ร้อน", "ลาเต้เย็น", "ลิ้นจี่(เพียวๆ)", "ลิ้นจี่โซดา ปั่น", "ลิ้นจี่โซดาเย็น", "วิปครีม 1 แก้ว", "สตอเบอรี่ (เพียวๆ)", "สตอเบอรี่โซดา", "สตอเบอรี่โยเกิร์ต ปั่น", "ส้ม (เพียวๆ)", "ส้มโซดา", "อเมริกาโน่", "อเมริกาโน่น้ำผึ้ง", "อเมริกาโน่มะพร้าว", "อเมริกาโน่ร้อน", "อเมริกาโน่ส้ม", "เนสกาแฟ", "เนสกาแฟ ปั่น", "เนสกาแฟเย็น", "เนสวีต้า", "เนสวีต้าปั่น", "เป๊ปซี่ปั่น", "เป๊ปซี่เย็น", "เผือก", "เผือก ปั่น", "เผือก ปั่น", "เพียวมัทฉะ", "เสาวรส (เพียวๆ)", "เสาวรสโซดา", "เอ็มร้อยปีโป้ ปั่น", "เอ็มร้อยปีโป้ ปั่น", "เอสเพรสโซ่ ปั่น", "เอสเพรสโซ่ช็อต", "เอสเย็น", "แคนตาลูป", "แดงมะนาวโซดา", "แตงโม(เพียวๆ)", "แตงโมโซดา", "แอปเปิ้ลเขียว(เพียวๆ)", "แอปเปิ้ลเขียวโซดา", "โกโก้ เย็น", "โกโก้ปั่น", "โกโก้ปั่นเพิ่มโอริโอ้", "โกโก้ร้อน", "โกโก้โฟมมะพร้าว", "โค้กปั่น", "โยเกิร์ตปีโป้ ปั่น", "โยเกิร์ตเพียว ปั่น", "โยเกิร์ตโซดา", "โอวัลติน", "โอวัลตินร้อน", "โอเลี้ยง", "โอเลี้ยงยกล้อ"];
+// ===== รูปเมนู =====
+function shrink(file,maxW){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{ const s=Math.min(1,maxW/img.width); const c=document.createElement("canvas"); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext("2d").drawImage(img,0,0,c.width,c.height); c.toBlob(b=>b?res(b):rej(new Error("แปลงรูปไม่ได้")),"image/jpeg",0.8); URL.revokeObjectURL(img.src); }; img.onerror=()=>rej(new Error("เปิดรูปไม่ได้")); img.src=URL.createObjectURL(file); }); }
+function openPhoto(){
+  $("sPhoto").innerHTML = `<h3>รูปเมนู</h3>
+    <select id="pSel">${MENU_NAMES.map((n,i)=>`<option value="${i}">${n}</option>`).join("")}</select>
+    <div id="pNow" class="small" style="margin:6px 0"></div>
+    <input type="file" id="pFile" accept="image/*">
+    <button class="mbtn" onclick="uploadPhoto()">อัปโหลดรูป</button>
+    <button class="mbtn gray" onclick="closeM('mPhoto')">ปิด</button>`;
+  $("pSel").onchange = showNow; showNow();
+  $("mPhoto").classList.add("show");
+}
+function closeM(id){ $(id).classList.remove("show"); }
+async function showNow(){
+  const i=+$("pSel").value;
+  const r=await fetch(SUPABASE_URL+"/rest/v1/menu_photos?idx=eq."+i+"&select=file,updated_at",{headers:H()});
+  const j=await r.json();
+  $("pNow").innerHTML = j[0] ? `ตอนนี้มีรูปแล้ว <img src="${SUPABASE_URL}/storage/v1/object/public/menu-images/${j[0].file}?v=${encodeURIComponent(j[0].updated_at)}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;vertical-align:middle">` : "ยังไม่มีรูป";
+}
+async function uploadPhoto(){
+  const i=+$("pSel").value, f=$("pFile").files[0];
+  if(!f){ alert("เลือกไฟล์รูปก่อนครับ"); return; }
+  try{
+    const blob = await shrink(f, 800);
+    const file = "item-"+i+".jpg";
+    let r = await fetch(SUPABASE_URL+"/storage/v1/object/menu-images/"+file,{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+token,"x-upsert":"true","Content-Type":"image/jpeg"},body:blob});
+    if(!r.ok) throw new Error("อัปโหลดรูปไม่สำเร็จ "+(await r.text()));
+    r = await fetch(SUPABASE_URL+"/rest/v1/menu_photos",{method:"POST",headers:{...H(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify({idx:i,name:MENU_NAMES[i],file,updated_at:new Date().toISOString()})});
+    if(!r.ok) throw new Error("บันทึกข้อมูลรูปไม่สำเร็จ "+(await r.text()));
+    alert("อัปโหลดแล้ว ลูกค้าจะเห็นรูปภายในไม่กี่นาที");
+    showNow();
+  }catch(e){ alert(e.message); }
+}
+
+// ===== ยอดขาย =====
+let salesRows = [];
+function bkkDate(off){ return new Date(Date.now()+7*3600000+off*86400000).toISOString().slice(0,10); }
+function openSales(){
+  $("sSales").innerHTML = `<h3>ยอดขาย</h3>
+    <input type="date" id="sDate" value="${bkkDate(0)}" onchange="loadSales()">
+    <div id="sSum"></div>
+    <div class="wrap" id="sTbl"></div>
+    <button class="mbtn" onclick="exportCsv()">ส่งออก CSV</button>
+    <button class="mbtn gray" onclick="closeM('mSales')">ปิด</button>`;
+  $("mSales").classList.add("show"); loadSales();
+}
+async function loadSales(){
+  const d=$("sDate").value;
+  const from=encodeURIComponent(d+"T00:00:00+07:00"), to=encodeURIComponent(d+"T23:59:59.999+07:00");
+  const r=await fetch(SUPABASE_URL+"/rest/v1/sales_log?paid_at=gte."+from+"&paid_at=lte."+to+"&order=paid_at.asc&limit=5000",{headers:H()});
+  salesRows = await r.json();
+  if(!Array.isArray(salesRows)){ $("sSum").textContent="โหลดไม่สำเร็จ"; return; }
+  const orders=new Set(salesRows.map(x=>x.order_id));
+  const sum=k=>salesRows.filter(k).reduce((a,x)=>a+Number(x.line_total),0);
+  const total=salesRows.reduce((a,x)=>a+Number(x.line_total),0);
+  const cashN=new Set(salesRows.filter(x=>x.pay_method==="cash").map(x=>x.order_id)).size;
+  const ppN=new Set(salesRows.filter(x=>x.pay_method!=="cash").map(x=>x.order_id)).size;
+  $("sSum").innerHTML = `<div class="sum"><div>บิล<b>${orders.size}</b></div><div>ยอดรวม<b>${total} ฿</b></div><div>เงินสด (${cashN} บิล)<b>${sum(x=>x.pay_method==="cash")} ฿</b></div><div>พร้อมเพย์ (${ppN} บิล)<b>${sum(x=>x.pay_method!=="cash")} ฿</b></div></div>`;
+  const agg={}; for(const x of salesRows){ agg[x.item_name]=agg[x.item_name]||{q:0,v:0}; agg[x.item_name].q+=Number(x.qty); agg[x.item_name].v+=Number(x.line_total); }
+  const top=Object.entries(agg).sort((a,b)=>b[1].v-a[1].v).slice(0,10);
+  $("sTbl").innerHTML = `<p><b>ขายดี 10 อันดับ</b></p><table class="tbl"><tr><th>เมนู</th><th>จำนวน</th><th>ยอด</th></tr>${top.map(([n,v])=>`<tr><td>${n}</td><td>${v.q}</td><td>${v.v}</td></tr>`).join("")}</table>
+    <p><b>รายการทั้งหมด</b></p><table class="tbl"><tr><th>เวลาจ่าย</th><th>บิล</th><th>ชื่อ</th><th>เมนู</th><th>ตัวเลือก</th><th>ราคา</th><th>จ่าย</th></tr>${salesRows.map(x=>`<tr><td>${new Date(x.paid_at).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok"})}</td><td>${x.order_id}</td><td>${x.nickname||""}</td><td>${x.item_name} x${x.qty}</td><td>${x.options||""}</td><td>${x.line_total}</td><td>${x.pay_method==="cash"?"เงินสด":"พร้อมเพย์"}</td></tr>`).join("")}</table>`;
+}
+function exportCsv(){
+  if(!salesRows.length){ alert("ไม่มีข้อมูลในวันนี้"); return; }
+  const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const head=["paid_at","order_id","nickname","item","qty","unit_price","line_total","options","pay_method"];
+  const lines=[head.join(","), ...salesRows.map(x=>[x.paid_at,x.order_id,x.nickname,x.item_name,x.qty,x.unit_price,x.line_total,x.options,x.pay_method].map(esc).join(","))];
+  const blob=new Blob(["\uFEFF"+lines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="sales-"+$("sDate").value+".csv"; a.click();
+}
+async function setO(id, patch){
+  await fetch(SUPABASE_URL+"/rest/v1/orders?id=eq."+id,{method:"PATCH",headers:H(),body:JSON.stringify(patch)});
+  poll();
+}
+
+// ===== พิมพ์ผ่านบลูทูธ (Web Bluetooth, ใช้ได้เฉพาะเครื่องพิมพ์แบบ BLE) =====
+let chr = null;
+async function connectBT(){
+  try{
+    const dev = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:["000018f0-0000-1000-8000-00805f9b34fb","0000ff00-0000-1000-8000-00805f9b34fb","e7810a71-73ae-499d-8c15-faa9aef0c3f2","49535343-fe7d-4ae5-8fa9-9fafd205e455","0000ffe0-0000-1000-8000-00805f9b34fb"]});
+    const srv = await dev.gatt.connect();
+    const svcs = await srv.getPrimaryServices();
+    const PRI=["000018f0-0000-1000-8000-00805f9b34fb","0000ff00-0000-1000-8000-00805f9b34fb","49535343-fe7d-4ae5-8fa9-9fafd205e455","e7810a71-73ae-499d-8c15-faa9aef0c3f2","0000ffe0-0000-1000-8000-00805f9b34fb"];
+    let best=null;
+    for(const s of svcs){ const cs = await s.getCharacteristics(); for(const c of cs){ if(c.properties.write||c.properties.writeWithoutResponse){ const rk=PRI.indexOf(s.uuid); const sc=rk<0?99:rk; if(!best||sc<best.sc) best={c,sc,svc:s.uuid}; } } }
+    if(!best) throw new Error("ไม่พบช่องส่งข้อมูลของเครื่องพิมพ์");
+    chr = best.c;
+    $("st").textContent = "ต่อแล้ว บริการ "+best.svc.slice(0,8)+" (ถ้าพิมพ์ไม่ออก แจ้งรหัสนี้ให้ผม)";
+    $("btbtn").textContent = "ต่อแล้ว: "+(dev.name||"เครื่องพิมพ์");
+  }catch(e){ alert("ต่อบลูทูธตรงไม่ได้: "+e.message+"\nเครื่องนี้อาจไม่ใช่แบบ BLE ให้ใช้ปุ่มปริ้นผ่านหน้าต่างพิมพ์แทน"); }
+}
+function enc(s){ return new TextEncoder().encode(s); }
+function tis620(str){ // แปลงอักษรไทยเป็น TIS-620 (ถ้าเครื่องพิมพ์ไม่รองรับไทย จะได้ตัวอักษรเพี้ยน)
+  const out=[]; for(const ch of str){ const c=ch.codePointAt(0); if(c>=0x0E01&&c<=0x0E5B) out.push(c-0x0E00+0xA0); else if(c<128) out.push(c); else out.push(63); } return new Uint8Array(out);
+}
+function ticketText(o){
+  const L=[];
+  L.push(SHOP_NAME); L.push("คิว "+o.id+"  "+o.nickname); L.push(new Date(o.created_at).toLocaleString("th-TH")); L.push("--------------------------------");
+  for(const c of (o.items||[])){ L.push(c.name+" x"+c.qty); const d=line(c); if(d) L.push("  "+d); }
+  L.push("--------------------------------"); L.push("รวม "+o.total+" บาท  "+(o.pay_method==="cash"?"เงินสด ":"")+(o.paid?"(จ่ายแล้ว)":"(ยังไม่จ่าย)")); L.push(""); L.push(""); L.push("");
+  return L.join("\n");
+}
+async function sendBT(bytes){
+  for(let i=0;i<bytes.length;i+=20){ const part=bytes.slice(i,i+20); if(chr.properties.writeWithoutResponse && chr.writeValueWithoutResponse) await chr.writeValueWithoutResponse(part); else if(chr.writeValueWithResponse) await chr.writeValueWithResponse(part); else await chr.writeValue(part); await new Promise(r=>setTimeout(r,25)); }
+}
+async function printOrder(id){
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  if(chr){
+    try{
+      const init = new Uint8Array([0x1B,0x40, 0x1B,0x74,0x16]); // reset + หน้ารหัสไทย (ค่าอาจต่างกันตามเครื่อง)
+      const body = tis620(ticketText(o));
+      const all = new Uint8Array(init.length+body.length); all.set(init,0); all.set(body,init.length);
+      await sendBT(all); return;
+    }catch(e){ alert("พิมพ์ผ่านบลูทูธไม่สำเร็จ ใช้หน้าต่างพิมพ์แทน\n"+e.message); }
+  }
+  printDialog(o);
+}
+function printDialog(o){
+  const w = window.open("","_blank","width=320,height=600");
+  w.document.write("<html><head><meta charset='utf-8'><style>@page{size:58mm auto;margin:2mm}body{font-family:sans-serif;font-size:12px;width:54mm}pre{white-space:pre-wrap;margin:0}</style></head><body><pre>"+ticketText(o).replace(/</g,"&lt;")+"</pre></body></html>");
+  w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+}
+async function testPrint(){
+  if(!chr){ printDialog({id:0,nickname:"ทดสอบ",created_at:new Date().toISOString(),total:65,paid:false,items:[{name:"ชาไทยเย็น",qty:1,sweet:"50 (หวานน้อย)",tops:["ไข่มุก"],blend:false,shot:false,note:""}]}); return; }
+  try{
+    const init=new Uint8Array([0x1B,0x40]);
+    const a=enc("TEST PRINT 123 OK\n--------------------------------\n");
+    const th=new Uint8Array([0x1B,0x74,0x16]);
+    const b=tis620("ทดสอบภาษาไทย ชาไทยเย็น 65 บาท\n\n\n\n");
+    const all=new Uint8Array(init.length+a.length+th.length+b.length);
+    let o=0; for(const p of [init,a,th,b]){ all.set(p,o); o+=p.length; }
+    await sendBT(all);
+    $("st").textContent="ส่งข้อมูลไปเครื่องพิมพ์แล้ว ดูว่ามีตัวอักษรอังกฤษออกไหม และภาษาไทยออกไหม";
+  }catch(e){ alert("ส่งไปเครื่องพิมพ์ไม่ได้: "+e.message); }
+}
+</script>
+</body>
+</html>
