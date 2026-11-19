@@ -61,7 +61,7 @@ function drawCats(){
 function setCat(c){cat=c;drawCats();drawList();}
 function drawList(){
   const rows = MENU.filter(m=>m.c===cat).map(m=>[m,m.idx]);
-  $("list").innerHTML = rows.map(([m,i])=>{ const ph = PHOTO[i] ? `<img src="${PHOTO[i]}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none">` : ""; return `<div class="item" onclick="pick(${i})"><div style="display:flex;align-items:center;gap:10px;min-width:0">${ph}<b>${m.n}</b></div><span style="flex:none">${m.p} ฿</span></div>`; }).join("");
+  $("list").innerHTML = rows.map(([m,i])=>{ const ph = PHOTO[i] ? `<img src="${PHOTO[i]}" loading="lazy" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none">` : ""; return `<div class="item" onclick="pick(${i})"><div style="display:flex;align-items:center;gap:10px;min-width:0">${ph}<b>${m.n}</b></div><span style="flex:none">${priceHtml(m)}</span></div>`; }).join("");
 }
 function pick(i){
   const m = MENU.find(x=>x.idx===i);
@@ -83,8 +83,9 @@ function addItem(i){
   const blend = $("bl") && $("bl").checked ? m.b : 0;
   const shot = $("sh") && $("sh").checked ? SHOT : 0;
   const qty = Math.max(1, parseInt($("qty").value)||1);
-  const unit = m.p + tops.reduce((a,t)=>a+t[1],0) + blend + shot;
-  cart.push({idx:m.idx, name:m.n, sweet:sw?sw.value:"", tops:tops.map(t=>t[0]), blend:!!blend, shot:!!shot, note:$("nt")?$("nt").value.trim():"", qty, unit});
+  const pr = promoOf(m);
+  const unit = (pr ? pr.price : m.p) + tops.reduce((a,t)=>a+t[1],0) + blend + shot;
+  cart.push({idx:m.idx, promo:pr?pr.name:"", name:m.n, sweet:sw?sw.value:"", tops:tops.map(t=>t[0]), blend:!!blend, shot:!!shot, note:$("nt")?$("nt").value.trim():"", qty, unit});
   closeM("m1"); drawBar();
 }
 function total(){return cart.reduce((a,c)=>a+c.unit*c.qty,0);}
@@ -95,7 +96,7 @@ function drawBar(){
 }
 function openCart(){
   let h = `<h3>ตะกร้าของคุณ</h3>`;
-  h += cart.map((c,i)=>`<div class="line"><div><b>${c.name}</b> x${c.qty}<br><span class="small">${[c.sweet?'หวาน '+c.sweet:'',...c.tops,c.blend?'ปั่น':'',c.shot?'เพิ่มช็อต':'',c.note].filter(Boolean).join(" / ")}</span></div><div>${c.unit*c.qty} ฿<br><a href="#" onclick="rm(${i});return false" class="small">ลบ</a></div></div>`).join("");
+  h += cart.map((c,i)=>`<div class="line"><div><b>${c.name}</b> x${c.qty}<br><span class="small">${[c.promo?'โปร: '+c.promo:'',c.sweet?'หวาน '+c.sweet:'',...c.tops,c.blend?'ปั่น':'',c.shot?'เพิ่มช็อต':'',c.note].filter(Boolean).join(" / ")}</span></div><div>${c.unit*c.qty} ฿<br><a href="#" onclick="rm(${i});return false" class="small">ลบ</a></div></div>`).join("");
   h += `<div class="line"><b>รวม</b><b>${total()} บาท</b></div>`;
   h += `<div class="grp"><p>ชื่อเล่นของคุณ (ไว้เรียกรับของ)</p><input type="text" id="nick" maxlength="20"></div>`;
   h += `<div class="grp"><p>วิธีจ่ายเงิน</p><span class="opt"><input type="radio" name="pm" id="pm1" value="cash" checked><label for="pm1">เงินสดที่เคาน์เตอร์</label></span><span class="opt"><input type="radio" name="pm" id="pm2" value="promptpay"><label for="pm2">สแกนจ่ายพร้อมเพย์</label></span></div>`;
@@ -142,11 +143,36 @@ function showPay(o, nick, pm){
 }
 let accepting = true;
 let PHOTO = {};
+let CATS_CUST = {}, PROMOS = [];
+function orderNames(list){ return list.sort((x,y)=>((CATS_CUST[x]||{}).sort ?? 1e6)-((CATS_CUST[y]||{}).sort ?? 1e6) || x.localeCompare(y,'th')); }
+function promoOf(m){
+  const now = Date.now(); let best = null;
+  for(const p of PROMOS){
+    if(p.starts_at && now < Date.parse(p.starts_at)) continue;
+    if(p.ends_at && now > Date.parse(p.ends_at)) continue;
+    const hit = p.scope==='all' || (p.scope==='cat' && p.target===m.c) || (p.scope==='item' && String(p.target)===String(m.idx));
+    if(!hit) continue;
+    const price = p.kind==='percent' ? Math.round(m.p*(1-Number(p.value)/100)) : Math.max(0, m.p-Number(p.value));
+    if(!best || price < best.price) best = {price, name:p.name};
+  }
+  return best;
+}
+function priceHtml(m){
+  const pr = promoOf(m);
+  return pr ? `<span style="text-decoration:line-through;color:#999;font-size:12px">${m.p}</span> <span style="color:#c62828">${pr.price} ฿</span>` : `${m.p} ฿`;
+}
 async function loadMenu(){
   try{
-    const r = await fetch(SUPABASE_URL+"/rest/v1/menu_custom?select=*&order=idx.asc",{headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+SUPABASE_KEY}});
-    const rows = await r.json();
+    const H2 = {apikey:SUPABASE_KEY, Authorization:"Bearer "+SUPABASE_KEY};
+    const [rows, catRows, promos] = await Promise.all([
+      fetch(SUPABASE_URL+"/rest/v1/menu_custom?select=*&order=idx.asc",{headers:H2}).then(r=>r.json()),
+      fetch(SUPABASE_URL+"/rest/v1/menu_categories?select=*&order=sort.asc",{headers:H2}).then(r=>r.json()).catch(()=>[]),
+      fetch(SUPABASE_URL+"/rest/v1/promotions?select=*&active=eq.true",{headers:H2}).then(r=>r.json()).catch(()=>[])
+    ]);
     if(!Array.isArray(rows)) return;
+    CATS_CUST = {};
+    (Array.isArray(catRows)?catRows:[]).forEach(c=>CATS_CUST[c.name]={sort:c.sort, active:c.active});
+    PROMOS = Array.isArray(promos) ? promos : [];
     const by = {}; rows.forEach(x=>by[x.idx]=x);
     const out = [];
     for(const b of BASE){
@@ -155,8 +181,8 @@ async function loadMenu(){
       if(o.active) out.push({idx:b.idx, n:o.name, c:o.cat, p:Number(o.price), ...(o.opts||{})});
     }
     for(const x of rows){ if(x.is_new && x.active) out.push({idx:x.idx, n:x.name, c:x.cat, p:Number(x.price), ...(x.opts||{})}); }
-    MENU = out;
-    cats = [...new Set(MENU.map(m=>m.c))];
+    MENU = out.filter(m => !(CATS_CUST[m.c] && CATS_CUST[m.c].active===false));
+    cats = orderNames([...new Set(MENU.map(m=>m.c))]);
     if(!cat || !cats.includes(cat)) cat = cats[0];
     drawCats(); drawList();
   }catch(e){}

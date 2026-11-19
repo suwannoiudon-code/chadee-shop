@@ -69,7 +69,7 @@ async function login(){
   const j = await r.json();
   if(!j.access_token){alert("เข้าสู่ระบบไม่สำเร็จ");return;}
   token = j.access_token; $("login").style.display="none"; $("app").style.display="block";
-  poll(); setInterval(poll, 4000); loadShop(); setInterval(loadShop, 30000); loadMenuAll();
+  poll(); setInterval(poll, 4000); loadShop(); setInterval(loadShop, 30000); loadMenuAll(); loadCatsPromos();
 }
 async function poll(){
   try{
@@ -237,6 +237,8 @@ async function loadMenuAll(){
 function openMenu(){
   $("sMenu").innerHTML = `<h3>จัดการเมนู</h3>
     <button class="mbtn" onclick="editItem(null)">+ เพิ่มเมนูใหม่</button>
+    <button class="mbtn" onclick="openCats()">หมวดหมู่</button>
+    <button class="mbtn" onclick="openPromos()">โปรโมชั่น</button>
     ${MENU_ALL.map(m=>`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:8px 0;${m.active?'':'opacity:.5'}">
       <div><b>${esc(m.n)}</b><div class="small">${esc(m.c)} · ${m.p} ฿${m.isNew?' · เมนูใหม่':''}${m.active?'':' · ซ่อนอยู่'}</div></div>
       <div style="white-space:nowrap"><button class="small" onclick="editItem(${m.idx})">แก้ไข</button> <button class="small" onclick="toggleItem(${m.idx})">${m.active?'ซ่อน':'แสดง'}</button></div></div>`).join("")}
@@ -284,6 +286,141 @@ async function saveRow(row){
   const r=await fetch(SUPABASE_URL+"/rest/v1/menu_custom",{method:"POST",headers:{...H(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify(row)});
   if(!r.ok){ alert("บันทึกไม่สำเร็จ "+(await r.text())); return; }
   await loadMenuAll(); openMenu();
+}
+// ===== หมวดหมู่ =====
+let CAT_ROWS = [], PROMO_ROWS = [], CAT_LIST = [];
+async function loadCatsPromos(){
+  try{ const r=await fetch(SUPABASE_URL+"/rest/v1/menu_categories?select=*&order=sort.asc",{headers:H()}); const j=await r.json(); CAT_ROWS = Array.isArray(j)?j:[]; }catch(e){}
+  try{ const r=await fetch(SUPABASE_URL+"/rest/v1/promotions?select=*&order=id.asc",{headers:H()}); const j=await r.json(); PROMO_ROWS = Array.isArray(j)?j:[]; }catch(e){}
+}
+function catOrderList(){
+  const set = new Set(MENU_ALL.map(m=>m.c)); CAT_ROWS.forEach(c=>set.add(c.name));
+  const sortOf = n => { const r=CAT_ROWS.find(c=>c.name===n); return r ? r.sort : 1e6; };
+  return [...set].sort((a,b)=> sortOf(a)-sortOf(b) || a.localeCompare(b,'th'));
+}
+function catActive(n){ const r=CAT_ROWS.find(c=>c.name===n); return r ? r.active!==false : true; }
+async function saveCats(names){
+  const rows = names.map((n,i)=>({name:n, sort:i*10, active:catActive(n)}));
+  const r = await fetch(SUPABASE_URL+"/rest/v1/menu_categories",{method:"POST",headers:{...H(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify(rows)});
+  if(!r.ok){ alert("บันทึกหมวดไม่สำเร็จ "+(await r.text())); return false; }
+  await loadCatsPromos(); return true;
+}
+function openCats(){
+  CAT_LIST = catOrderList();
+  $("sMenu").innerHTML = `<h3>หมวดหมู่</h3>
+    <button class="mbtn" onclick="addCat()">+ เพิ่มหมวดใหม่</button>
+    ${CAT_LIST.map((n,i)=>{ const hidden=!catActive(n); const cnt=MENU_ALL.filter(m=>m.c===n).length;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee;padding:8px 0;${hidden?'opacity:.5':''}">
+        <div><b>${esc(n)}</b><div class="small">${cnt} เมนู${hidden?' · ซ่อนอยู่':''}</div></div>
+        <div style="white-space:nowrap"><button class="small" onclick="moveCat(${i},-1)">↑</button> <button class="small" onclick="moveCat(${i},1)">↓</button> <button class="small" onclick="renameCat(${i})">ชื่อ</button> <button class="small" onclick="toggleCat(${i})">${hidden?'แสดง':'ซ่อน'}</button></div></div>`; }).join("")}
+    <button class="mbtn gray" onclick="openMenu()">กลับ</button>`;
+  $("mMenu").classList.add("show");
+}
+async function moveCat(i,d){
+  const names=[...CAT_LIST]; const j=i+d; if(j<0||j>=names.length) return;
+  [names[i],names[j]]=[names[j],names[i]];
+  if(await saveCats(names)) { CAT_LIST=catOrderList(); openCats(); }
+}
+async function toggleCat(i){
+  const n=CAT_LIST[i];
+  const rows=CAT_LIST.map((x,k)=>({name:x, sort:k*10, active: x===n ? !catActive(x) : catActive(x)}));
+  const r=await fetch(SUPABASE_URL+"/rest/v1/menu_categories",{method:"POST",headers:{...H(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify(rows)});
+  if(!r.ok){ alert("ไม่สำเร็จ "+(await r.text())); return; }
+  await loadCatsPromos(); openCats();
+}
+async function postRow(row){
+  const r=await fetch(SUPABASE_URL+"/rest/v1/menu_custom",{method:"POST",headers:{...H(),Prefer:"resolution=merge-duplicates"},body:JSON.stringify(row)});
+  if(!r.ok){ alert("บันทึกเมนูไม่สำเร็จ "+(await r.text())); return false; }
+  return true;
+}
+async function renameCat(i){
+  const old=CAT_LIST[i];
+  const nn=(prompt("ชื่อหมวดใหม่", old)||"").trim();
+  if(!nn || nn===old) return;
+  if(CAT_LIST.includes(nn)){ alert("มีหมวดชื่อนี้อยู่แล้ว"); return; }
+  for(const m of MENU_ALL.filter(x=>x.c===old)){
+    const ok = await postRow({idx:m.idx, name:m.n, cat:nn, price:m.p, opts:optsOf(m), active:m.active, is_new:m.isNew, updated_at:new Date().toISOString()});
+    if(!ok) return;
+  }
+  await fetch(SUPABASE_URL+"/rest/v1/menu_categories?name=eq."+encodeURIComponent(old),{method:"DELETE",headers:H()});
+  const names=CAT_LIST.map(x=>x===old?nn:x);
+  if(await saveCats(names)){ await loadMenuAll(); CAT_LIST=catOrderList(); openCats(); }
+}
+async function addCat(){
+  const nn=(prompt("ชื่อหมวดใหม่")||"").trim();
+  if(!nn) return;
+  if(CAT_LIST.includes(nn)){ alert("มีหมวดชื่อนี้อยู่แล้ว"); return; }
+  if(await saveCats([...CAT_LIST, nn])){ CAT_LIST=catOrderList(); openCats(); }
+}
+
+// ===== โปรโมชั่น =====
+function toLocalInput(iso){ return iso ? new Date(Date.parse(iso)+7*3600000).toISOString().slice(0,16) : ""; }
+function promoLabel(p){
+  const tgt = p.scope==='all' ? 'ทั้งร้าน' : p.scope==='cat' ? 'หมวด '+p.target : 'เมนู '+((MENU_ALL.find(m=>String(m.idx)===String(p.target))||{}).n||p.target);
+  return tgt+' · '+(p.kind==='percent' ? 'ลด '+p.value+'%' : 'ลด '+p.value+' บาท');
+}
+function promoRange(p){
+  const f=s=>new Date(s).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',dateStyle:'short',timeStyle:'short'});
+  return (p.starts_at?'เริ่ม '+f(p.starts_at):'เริ่มทันที')+' · '+(p.ends_at?'ถึง '+f(p.ends_at):'ไม่มีวันสิ้นสุด');
+}
+function openPromos(){
+  $("sMenu").innerHTML = `<h3>โปรโมชั่น</h3>
+    <button class="mbtn" onclick="editPromo(null)">+ เพิ่มโปรโมชั่น</button>
+    ${PROMO_ROWS.length ? PROMO_ROWS.map(p=>`<div style="border-bottom:1px solid #eee;padding:8px 0;${p.active?'':'opacity:.5'}">
+      <b>${esc(p.name)}</b><div class="small">${esc(promoLabel(p))}</div>
+      <div class="small">${promoRange(p)}${p.active?'':' · ปิดอยู่'}</div>
+      <div style="margin-top:4px"><button class="small" onclick="editPromo(${p.id})">แก้ไข</button> <button class="small" onclick="togglePromo(${p.id})">${p.active?'ปิด':'เปิด'}</button> <button class="small" onclick="deletePromo(${p.id})">ลบ</button></div></div>`).join("") : '<p class="small">ยังไม่มีโปรโมชั่น</p>'}
+    <button class="mbtn gray" onclick="openMenu()">กลับ</button>`;
+  $("mMenu").classList.add("show");
+}
+function editPromo(id){
+  const p = id===null ? {name:"",scope:"all",target:"",kind:"percent",value:"",starts_at:null,ends_at:null} : PROMO_ROWS.find(x=>x.id===id);
+  window._pTarget = p.target;
+  $("sMenu").innerHTML = `<h3>${id===null?'เพิ่มโปรโมชั่น':'แก้ไขโปรโมชั่น'}</h3>
+    <label class="small">ชื่อโปรโมชั่น (ลูกค้าจะเห็น)</label><input id="pN" value="${esc(p.name)}">
+    <label class="small">ใช้กับ</label>
+    <select id="pScope" onchange="fillTargets()">
+      <option value="all" ${p.scope==='all'?'selected':''}>ทั้งร้าน</option>
+      <option value="cat" ${p.scope==='cat'?'selected':''}>หมวดหมู่</option>
+      <option value="item" ${p.scope==='item'?'selected':''}>เมนูเดียว</option></select>
+    <div id="pTargetWrap"></div>
+    <label class="small">รูปแบบส่วนลด</label>
+    <select id="pKind"><option value="percent" ${p.kind==='percent'?'selected':''}>ลดเป็นเปอร์เซ็นต์</option><option value="amount" ${p.kind==='amount'?'selected':''}>ลดเป็นบาท</option></select>
+    <label class="small">ค่าส่วนลด</label><input id="pV" type="number" min="0" value="${p.value}">
+    <label class="small">เริ่ม (เว้นว่างได้)</label><input id="pS" type="datetime-local" value="${toLocalInput(p.starts_at)}">
+    <label class="small">สิ้นสุด (เว้นว่างได้)</label><input id="pE" type="datetime-local" value="${toLocalInput(p.ends_at)}">
+    <button class="mbtn" onclick="savePromo(${id===null?'null':id})">บันทึก</button>
+    <button class="mbtn gray" onclick="openPromos()">ยกเลิก</button>`;
+  fillTargets();
+}
+function fillTargets(){
+  const sc=$("pScope").value, w=$("pTargetWrap"), cur=window._pTarget;
+  if(sc==='all'){ w.innerHTML=""; return; }
+  if(sc==='cat'){ w.innerHTML=`<label class="small">หมวด</label><select id="pT">${catOrderList().map(c=>`<option value="${esc(c)}" ${c===cur?'selected':''}>${esc(c)}</option>`).join("")}</select>`; return; }
+  w.innerHTML=`<label class="small">เมนู</label><select id="pT">${MENU_ALL.map(m=>`<option value="${m.idx}" ${String(m.idx)===String(cur)?'selected':''}>${esc(m.n)}</option>`).join("")}</select>`;
+}
+async function savePromo(id){
+  const name=$("pN").value.trim(), scope=$("pScope").value, kind=$("pKind").value, value=+$("pV").value;
+  if(!name){ alert("ใส่ชื่อโปรโมชั่น"); return; }
+  if(!(value>0)){ alert("ใส่ค่าส่วนลดให้มากกว่า 0"); return; }
+  if(kind==='percent' && value>100){ alert("เปอร์เซ็นต์ต้องไม่เกิน 100"); return; }
+  const toIso=v=>v ? new Date(v+":00+07:00").toISOString() : null;
+  const row={name, scope, target: scope==='all' ? null : $("pT").value, kind, value, starts_at:toIso($("pS").value), ends_at:toIso($("pE").value)};
+  let r;
+  if(id===null) r=await fetch(SUPABASE_URL+"/rest/v1/promotions",{method:"POST",headers:H(),body:JSON.stringify({...row,active:true})});
+  else r=await fetch(SUPABASE_URL+"/rest/v1/promotions?id=eq."+id,{method:"PATCH",headers:H(),body:JSON.stringify(row)});
+  if(!r.ok){ alert("บันทึกไม่สำเร็จ "+(await r.text())); return; }
+  await loadCatsPromos(); openPromos();
+}
+async function togglePromo(id){
+  const p=PROMO_ROWS.find(x=>x.id===id); if(!p) return;
+  await fetch(SUPABASE_URL+"/rest/v1/promotions?id=eq."+id,{method:"PATCH",headers:H(),body:JSON.stringify({active:!p.active})});
+  await loadCatsPromos(); openPromos();
+}
+async function deletePromo(id){
+  if(!confirm("ลบโปรโมชั่นนี้?")) return;
+  await fetch(SUPABASE_URL+"/rest/v1/promotions?id=eq."+id,{method:"DELETE",headers:H()});
+  await loadCatsPromos(); openPromos();
 }
 async function setO(id, patch){
   await fetch(SUPABASE_URL+"/rest/v1/orders?id=eq."+id,{method:"PATCH",headers:H(),body:JSON.stringify(patch)});
